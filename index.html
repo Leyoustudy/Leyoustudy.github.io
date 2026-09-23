@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -17,6 +18,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
 :root{
   --paper:#f6f1e7;--paper2:#ece4d2;--ink:#26221c;--soft:#6b6355;--line:#d6ccb6;
@@ -36,6 +38,13 @@ input:focus,textarea:focus,select:focus{outline:2px solid var(--red);outline-off
 .auth-box .sub{color:var(--soft);font-size:13px;margin-bottom:20px}
 .auth-box label{display:block;font-size:13px;color:var(--soft);margin:10px 0 4px}
 .auth-box input{width:100%}
+.cloud-login{background:var(--greenbg);border:1px solid #c3d6c9;border-radius:10px;padding:14px;margin-bottom:16px}
+.cloud-login .sub{color:var(--green);font-size:12.5px;margin-bottom:10px;line-height:1.7}
+.cloud-login input{margin-bottom:8px}
+.cloud-login .cl-status{font-size:12px;margin-top:8px;min-height:16px;color:var(--soft)}
+.cloud-login .btn{font-size:13.5px;padding:9px 12px}
+.auth-divider{display:flex;align-items:center;gap:10px;color:var(--soft);font-size:12px;margin:16px 0}
+.auth-divider::before,.auth-divider::after{content:"";flex:1;height:1px;background:var(--line)}
 .btn{display:inline-block;padding:9px 18px;border-radius:8px;background:var(--ink);color:var(--paper);font-size:14px;transition:.15s}
 .btn:hover{opacity:.9}
 .btn.red{background:var(--red);border-color:var(--red)}
@@ -301,6 +310,17 @@ details.fold-card:not([open])>summary::after{content:"（已折叠，点此展�
 <div class="auth-wrap hidden" id="authScreen">
   <div class="auth-box">
     <h2>上岸打卡</h2>
+    <div class="cloud-login">
+      <div class="sub">☁️ <b>云账号（推荐）</b><br>邮箱注册一次，数据永久保存在云端；换手机/电脑登录同一账号，全部数据自动回来，不会丢失。</div>
+      <input type="email" id="clEmail" placeholder="邮箱（如 123@qq.com）" autocomplete="email">
+      <input type="password" id="clPwd" placeholder="密码（至少6位）" autocomplete="current-password">
+      <div class="row" style="gap:8px">
+        <button class="btn" id="clLogin" style="flex:1">登 录</button>
+        <button class="btn ghost" id="clSignup" style="flex:1">注册新账号</button>
+      </div>
+      <div class="cl-status" id="clStatus"></div>
+    </div>
+    <div class="auth-divider">或使用本机主人码（仅本设备保存）</div>
     <div class="sub" id="authSub">第一次使用，请设置主人密码</div>
     <div class="auth-tabs" id="authTabs">
       <button class="on" data-mode="owner">主人（可编辑）</button>
@@ -308,9 +328,6 @@ details.fold-card:not([open])>summary::after{content:"（已折叠，点此展�
     </div>
     <div id="authForm"></div>
     <div style="margin-top:14px;text-align:center">
-      <button class="btn ghost sm" id="authCloudBtn" style="font-size:12.5px">☁️ 账号云恢复（输主人码+监督码）</button>
-    </div>
-    <div style="margin-top:8px;text-align:center">
       <button class="btn ghost sm" id="authRestoreBtn" style="font-size:12.5px">📲 我有同步码，换机恢复</button>
     </div>
   </div>
@@ -673,13 +690,20 @@ details.fold-card:not([open])>summary::after{content:"（已折叠，点此展�
           <input type="file" id="importFile" accept=".json" class="hidden">
         </div>
         <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
-        <h2 style="font-size:14px">📲 跨设备同步（换机 / 换浏览器）</h2>
+        <h2 style="font-size:14px">☁️ 云账号（永久云端保存）</h2>
         <div style="font-size:12.5px;color:var(--soft);margin:6px 0;line-height:1.8">
-          ① <b>云恢复（推荐，近期换机）</b>：应用每90秒自动备份到云端（保留约12小时）。新设备登录页点「☁️ 账号云恢复」，输入主人码+监督码即自动恢复，像账号登录。<br>
-          ② <b>同步码（长期兜底）</b>：换机前点「生成同步码」复制保存；超过12小时或云恢复失败时，在新设备登录页点「我有同步码」粘贴，全部数据恢复。
+          当前登录：<b id="cloudUserLabel">未登录</b><br>
+          所有打卡、番茄、习惯数据会实时自动同步到云端，永久保存；换设备登录同一账号即可恢复。断网时先存本机，联网后自动补传。
         </div>
+        <div class="row" style="margin:8px 0;flex-wrap:wrap">
+          <button class="btn sm" id="cloudSyncNowBtn">立即同步到云端</button>
+          <button class="btn ghost sm" id="cloudSignOutBtn">退出云账号</button>
+        </div>
+        <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
+        <h2 style="font-size:14px">📲 同步码（离线兜底）</h2>
+        <div style="font-size:12.5px;color:var(--soft);margin:6px 0;line-height:1.8">不用云账号时，可生成同步码手动保存；在新设备登录页点「我有同步码」粘贴恢复全部数据。</div>
         <div class="row" style="margin:8px 0">
-          <button class="btn sm" id="genSyncBtn">生成同步码（换机前点）</button>
+          <button class="btn sm" id="genSyncBtn">生成同步码</button>
           <button class="btn ghost sm" id="restoreSyncBtn">输入同步码恢复</button>
         </div>
         <hr style="border:none;border-top:1px solid var(--line);margin:14px 0">
@@ -938,9 +962,62 @@ const QUESTIONS = [
 {id:"g32",d:"10.22",s:"专业课",t:"稳定性",q:"$K=10$ 时 $G(s)=K/[s(0.1s+1)(0.5s+1)]$ 是否稳定？$\\gamma$？",a:"稳定，$\\gamma\\approx17^\\circ$。",calc:"$K=10<14临界\\Rightarrow稳定；\\gamma\\approx17°$",key:"$比较实际K与临界K$"},
 ];
 
+/* ===== ☁️ Supabase 云账号（永久云端保存，跨设备互通） =====
+   使用方法：
+   1. Supabase 后台执行一次建表 SQL（见交付说明里的 user_data 表）；
+   2. 把下面两行换成你自己的值（Project URL 和 anon public key）。 */
+const SUPABASE_URL="https://carrpmoudvoifoctvcnf.supabase.co"; // ← 你的 Project URL
+const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcnJwbW91ZHZvaWZvY3R2Y25mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNDU2OTQsImV4cCI6MjEwNTcyMTY5NH0.QgkVICqEfw6Xdnfo6GIDU7isJfr1DGkl6ttixMSmXtQ"; // ← 你的 anon public key
+
+let _sb=null,_sbUser=null,_cloudDirty=null,_cloudTimer=null;
+function sbClient(){
+  if(_sb)return _sb;
+  if(!window.supabase||!SUPABASE_ANON_KEY||SUPABASE_ANON_KEY.indexOf("PASTE_")===0)return null;
+  try{_sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});return _sb}catch(e){return null}
+}
+function sbUser(){return _sbUser}
+/* 把本地全部 ka_* 数据推送到云端（登录后调用） */
+function cloudPushAll(){
+  const sb=sbClient();if(!sb||!_sbUser)return;
+  const rows=[];const now=new Date().toISOString();
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith("ka_")){
+      try{rows.push({user_id:_sbUser.id,key:k,value:localStorage.getItem(k),updated_at:now})}catch(e){}
+    }
+  }
+  if(!rows.length)return;
+  sb.from("user_data").upsert(rows,{onConflict:"user_id,key"}).then(({error})=>{
+    if(error&&!String(error.message).includes("does not exist"))console.warn("cloudPush:",error.message);
+  });
+}
+/* 从云端拉取全部数据写入本地（登录/注册成功后调用） */
+async function cloudPullAll(){
+  const sb=sbClient();if(!sb||!_sbUser)return false;
+  try{
+    const {data,error}=await sb.from("user_data").select("key,value").eq("user_id",_sbUser.id);
+    if(error){if(String(error.message).includes("does not exist"))return false;console.warn(error.message);return false}
+    if(data&&data.length){
+      data.forEach(r=>{try{localStorage.setItem(r.key,r.value)}catch(e){}});
+    }
+    return true;
+  }catch(e){return false}
+}
+/* 把单条数据排队写入云端（LS.set 的钩子，2秒防抖合并） */
+function cloudQueueSet(k,v){
+  if(!sbClient()||!_sbUser||!k||k.indexOf("ka_")!==0)return;
+  _cloudDirty=_cloudDirty||{};_cloudDirty[k]=v;
+  clearTimeout(_cloudTimer);
+  _cloudTimer=setTimeout(()=>{
+    const sb=sbClient();if(!sb||!_sbUser||!_cloudDirty)return;
+    const rows=Object.keys(_cloudDirty).map(key=>({user_id:_sbUser.id,key,value:_cloudDirty[key],updated_at:new Date().toISOString()}));
+    _cloudDirty=null;
+    sb.from("user_data").upsert(rows,{onConflict:"user_id,key"}).catch(()=>{});
+  },2000);
+}
 const LS = {
   get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
-  set(k,v){localStorage.setItem(k,JSON.stringify(v))}
+  set(k,v){localStorage.setItem(k,JSON.stringify(v));cloudQueueSet(k,JSON.stringify(v))}
 };
 let ROLE="owner",currentDate=todayISO(),qSubj="数学",hideAns=false,calMonth=null;
 
@@ -1006,6 +1083,7 @@ function initAuth(){
   let mode="owner";
   function renderForm(){
     document.querySelectorAll("#authTabs button").forEach(b=>b.classList.toggle("on",b.dataset.mode===mode));
+    if(sub){
     if(!auth){
       sub.textContent="第一次使用，请设置主人密码";
       form.innerHTML=`<label>主人密码（至少4位）</label><input type="password" id="fPwd">
@@ -1031,12 +1109,52 @@ function initAuth(){
         if(document.getElementById("fMon").value===auth.mon){ROLE="monitor";enterApp()}else alert("监督码错误");
       };
     }
+    }
   }
   document.querySelectorAll("#authTabs button").forEach(b=>b.onclick=()=>{mode=b.dataset.mode;renderForm()});
   const rb=document.getElementById("authRestoreBtn");
   if(rb)rb.onclick=()=>showRestoreCodeModal(false);
-  const cb=document.getElementById("authCloudBtn");
-  if(cb)cb.onclick=showCloudRestoreModal;
+
+  /* ☁️ 云账号：登录 / 注册 */
+  function clStatus(msg,err){const el=document.getElementById("clStatus");if(el){el.textContent=msg;el.style.color=err?"var(--red)":"var(--green)"}}
+  const clLogin=document.getElementById("clLogin"),clSignup=document.getElementById("clSignup");
+  async function doCloud(reg){
+    const sb=sbClient();
+    if(!sb){clStatus("云服务未配置：请先在代码里填入 anon key（见交付说明）",true);return}
+    const email=document.getElementById("clEmail").value.trim();
+    const pwd=document.getElementById("clPwd").value;
+    if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){clStatus("请输入正确的邮箱地址",true);return}
+    if(pwd.length<6){clStatus("密码至少6位",true);return}
+    clStatus(reg?"正在注册…":"正在登录…",false);
+    try{
+      if(reg){
+        const {data,error}=await sb.auth.signUp({email,password:pwd});
+        if(error){clStatus("注册失败："+error.message,true);return}
+        if(!data.session){clStatus("注册成功！请到邮箱点验证链接激活账号，再回来登录",false);return}
+        _sbUser=data.session.user;
+        await cloudPullAll();           // 拉云端（新账号一般没有）
+        await cloudPushAll();           // 把本机已有数据带到云端（首次注册）
+        ROLE="owner";enterApp();
+      }else{
+        const {data,error}=await sb.auth.signInWithPassword({email,password:pwd});
+        if(error){clStatus("登录失败："+error.message,true);return}
+        _sbUser=data.session.user;
+        const pulled=await cloudPullAll();   // 拉取云端全部数据 → 写入本地
+        if(!pulled)clStatus("已登录，但云端表未生效：请先在 Supabase 执行 user_data 建表 SQL（见交付说明）",true);
+        ROLE="owner";enterApp();
+      }
+    }catch(e){clStatus("网络异常，请稍后重试",true)}
+  }
+  if(clLogin)clLogin.onclick=()=>doCloud(false);
+  if(clSignup)clSignup.onclick=()=>doCloud(true);
+
+  /* 已登录云账号 → 自动恢复会话并进入 */
+  if(_sbUser&&_sbUser.email){
+    ROLE="owner";screen.classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+    enterApp();
+    return;
+  }
   renderForm();screen.classList.remove("hidden");
 }
 function enterApp(){
@@ -2727,6 +2845,24 @@ function bindSettings(){
   document.getElementById("resetStudyBtn").onclick=resetStudyFromToday;
   const gs=document.getElementById("genSyncBtn");if(gs)gs.onclick=showSyncCodeModal;
   const rs=document.getElementById("restoreSyncBtn");if(rs)rs.onclick=()=>showRestoreCodeModal(true);
+
+  /* ☁️ 云账号状态与操作 */
+  const cu=document.getElementById("cloudUserLabel");
+  if(cu)cu.textContent=_sbUser&&_sbUser.email?_sbUser.email:"未登录（用主人码时数据只在本机）";
+  const sn=document.getElementById("cloudSyncNowBtn");
+  if(sn)sn.onclick=()=>{
+    if(!_sbUser){alert("当前未登录云账号，请在登录页用邮箱注册/登录");return}
+    cloudPushAll();alert("已同步到云端 ✓ 所有数据现在保存在云账号下");
+  };
+  const so=document.getElementById("cloudSignOutBtn");
+  if(so)so.onclick=async()=>{
+    if(!_sbUser){alert("当前未登录云账号");return}
+    if(!confirm("退出云账号后，本机数据仍保留，但不再自动同步。确定退出？"))return;
+    cloudPushAll();
+    const sb=sbClient();
+    try{await sb.auth.signOut()}catch(e){}
+    _sbUser=null;location.reload();
+  };
   updateStartDateLabel();
 }
 
@@ -3129,6 +3265,25 @@ clearAllBuiltinTasks();
 initAuth();
 auditUnfinished(false);
 setInterval(updateCountdown,1000);
+
+/* ☁️ 自动恢复云会话：Supabase 记住登录，每次打开自动拉取云端最新数据 */
+(async function autoCloudSession(){
+  const sb=sbClient();
+  if(!sb)return;
+  try{
+    const {data}=await sb.auth.getSession();
+    if(!data.session)return;
+    _sbUser=data.session.user;
+    if(!sessionStorage.getItem("ka_cloud_loaded")){
+      sessionStorage.setItem("ka_cloud_loaded","1");
+      await cloudPullAll();
+    }
+    ROLE="owner";
+    document.getElementById("authScreen").classList.add("hidden");
+    document.getElementById("app").classList.remove("hidden");
+    try{enterApp()}catch(e){}
+  }catch(e){console.warn("autoCloudSession:",e.message)}
+})();
 
 // 定时提醒：单词复习 / 学习开始 / 22:30 复盘；跨日自动结转未完成任务
 let _reminded={},_appDate=todayISO();
