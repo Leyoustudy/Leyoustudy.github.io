@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
-<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoi5byA5Y+R5aKe5YiG5Lqr57uRIiwic2hvcnRfbmFtZSI6IuW8oOWfjuiwgSIsInN0YXJ0X3VybCI6Ii4iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImJhY2tncm91bmRfY29sb3IiOiIjZmZmZmZmIiwidGhlbWVfY29sb3IiOiIjZTVzNzMifQ=="/>
+<link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoi5byA5Y+R5aKe5YiG5Lqr57uRIiwic2hvcnRfbmFtZSI6IuW8oOWfjuiwgSIsInN0YXJ0X3VybCI6Ii4iLCJkaXNwbGF5Ijoic3RhbmRhbG9uZSIsImJhY2tncm91bmRfY29sb3IiOiIjZmY2MjIxIn0=">
 <title>考研上岸打卡</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",system-ui}
@@ -20,34 +20,33 @@ body{background:#f7f8fa;padding:14px;max-width:720px;margin:0 auto;color:#222;fo
 .btn{border:none;border-radius:10px;padding:9px 14px;font-size:15px;cursor:pointer;background:#2563eb;color:#fff;margin:3px}
 .btn-danger{background:#dc2626}
 .btn-gray{background:#6b7280}
-.task-row{display:flex;align-items:center;padding:9px 0;border-bottom:1px solid #efefef;gap:8px}
-.task-text{flex:1}
-input[type=checkbox]{width:34px;height:34px;margin:0;cursor:pointer}
 .tomato-card{background:#fff;border-radius:14px;padding:16px;margin:12px 0}
 .tomato-clock{text-align:center;font-size:42px;font-weight:bold;margin:12px 0}
-.tip-text{color:#666;font-size:14px;margin:6px 0}
+.tip-text{color:#666;font-size:14px;margin:6px 0;text-align:center}
 input.edit-input{width:100%;border:1px solid #d1d5db;border-radius:8px;padding:10px;font-size:16px;margin:5px 0}
 </style>
 </head>
 <body>
 <div class="red-count-card">
-<div>距离考研 2026‑12‑18 00:00</div>
+<div>距离考研 2026-12-18 00:00</div>
 <div class="big-day" id="dayShow">--</div>
 <div class="hm-text" id="hmShow">--时 --分 --秒</div>
-<div style="margin-top:8px"><button class="btn btn-gray" id="editDeadlineBtn">✏ 修改截止时间</button></div>
+<div style="margin-top:8px;text-align:center">
+<button class="btn btn-gray" id="editDeadlineBtn">✏ 修改截止时间</button>
+</div>
 </div>
 
 <div class="collapse-wrap">
-<div class="collapse-title" onclick="toggle('stageWrap')">三阶段 ▾</div>
+<div class="collapse-title" onclick="toggleBlock('stageWrap')">三阶段 ▾</div>
 <div class="collapse-body" id="stageWrap">
-<div>基础强化收尾 9.21‑10.26</div>
-<div style="margin-top:6px">真题强化 10.27‑11.30</div>
-<div style="margin-top:6px">冲刺模拟 12.1‑12.18</div>
+<div>基础强化收尾 9.21-10.26</div>
+<div style="margin-top:6px">真题强化 10.27-11.30</div>
+<div style="margin-top:6px">冲刺模拟 12.1-12.18</div>
 </div>
 </div>
 
 <div class="collapse-wrap">
-<div class="collapse-title" onclick="toggle('deadlineWrap')">死线 ▾</div>
+<div class="collapse-title" onclick="toggleBlock('deadlineWrap')">死线 ▾</div>
 <div class="collapse-body" id="deadlineWrap">
 <div>9.30 高数一轮结束</div>
 <div style="margin-top:6px">10.15 线代概率收尾</div>
@@ -55,93 +54,96 @@ input.edit-input{width:100%;border:1px solid #d1d5db;border-radius:8px;padding:1
 </div>
 
 <div class="collapse-wrap">
-<div class="collapse-title" onclick="toggle('schedWrap')">作息 ▾</div>
+<div class="collapse-title" onclick="toggleBlock('schedWrap')">作息 ▾</div>
 <div class="collapse-body" id="schedWrap">
-<input class="edit-input" placeholder="直接手写修改作息" id="schedInput"/>
+<input class="edit-input" placeholder="直接手写修改作息，自动保存" id="schedInput"/>
 </div>
 </div>
 
 <div class="tomato-card">
-<h3>🍅番茄钟</h3>
+<h3>🍅 番茄钟</h3>
 <div class="tomato-clock" id="pomoClock">25:00</div>
 <div class="tip-text" id="pomoTip">今日第0个番茄｜今日专注0小时0分</div>
 <div style="text-align:center;margin-top:10px">
-<button class="btn" id="pomoStartBtn">⏱倒计时专注</button>
+<button class="btn" id="pomoStartBtn">⏱ 倒计时专注</button>
 <button class="btn" id="pomoStopBtn">暂停</button>
 <button class="btn btn-danger" id="pomoResetBtn">重置</button>
-<button class="btn" id="pomoCountUpBtn">⏱正计时</button>
+<button class="btn" id="pomoCountUpBtn">⏱ 正计时</button>
 </div>
-<div class="tip-text" id="pauseTip"></div>
 </div>
 
 <script>
-//==== 倒计时逻辑
-let endTime = new Date("2026‑12‑18T00:00:00").getTime();
-const STORAGE_KEY_DEADLINE = "kaoyan_deadline_ts";
-const savedTs = localStorage.getItem(STORAGE_KEY_DEADLINE);
-if(savedTs) endTime = Number(savedTs);
+// ========== 倒计时（Safari 100%兼容版） ==========
+const STORAGE_DEADLINE = "kaoyan_deadline_ts";
+// 用数字构造日期，彻底避开字符串解析兼容性问题：月份从0开始，11=12月
+let endTime = new Date(2026, 11, 18, 0, 0, 0).getTime();
 
-function renderCountDown(){
+const saved = localStorage.getItem(STORAGE_DEADLINE);
+if (saved) endTime = Number(saved);
+
+function renderCountdown() {
   const now = Date.now();
   const diff = endTime - now;
-  if(diff <=0){
-    document.getElementById("dayShow").innerText="已到考试日";
-    document.getElementById("hmShow").innerText="";
+  if (diff <= 0) {
+    document.getElementById("dayShow").innerText = "已到考试日";
+    document.getElementById("hmShow").innerText = "";
     return;
   }
-  const day = Math.floor(diff/(1000*60*60*24));
-  const rem = diff%(1000*60*60*24);
-  const h = Math.floor(rem/(1000*60*60));
-  const m = Math.floor((rem%(1000*60*60))/(1000*60));
-  const s = Math.floor((rem%(1000*60))/1000);
+  const day = Math.floor(diff / (1000 * 60 * 60 * 24));
+  const rem = diff % (1000 * 60 * 60 * 24);
+  const h = Math.floor(rem / (1000 * 60 * 60));
+  const m = Math.floor((rem % (1000 * 60 * 60)) / (1000 * 60));
+  const s = Math.floor((rem % (1000 * 60)) / 1000);
+  
   document.getElementById("dayShow").innerText = day + " 天";
-  document.getElementById("hmShow").innerText = `${String(h).padStart(2,'0')}时 ${String(m).padStart(2,'0')}分 ${String(s).padStart(2,'0')}秒`;
+  document.getElementById("hmShow").innerText = 
+    String(h).padStart(2, "0") + "时 " +
+    String(m).padStart(2, "0") + "分 " +
+    String(s).padStart(2, "0") + "秒";
 }
-setInterval(renderCountDown,1000);
-renderCountDown();
+setInterval(renderCountdown, 1000);
+renderCountdown();
 
-document.getElementById("editDeadlineBtn").onclick = function(){
-  const val = prompt("请输入截止时间：格式 2026‑12‑18T00:00:00","2026‑12‑18T00:00:00");
-  if(!val) return;
-  const t = new Date(val).getTime();
-  if(isNaN(t)){alert("时间格式错误");return}
+document.getElementById("editDeadlineBtn").onclick = function () {
+  const val = prompt("请输入截止日期，格式：2026-12-18", "2026-12-18");
+  if (!val) return;
+  const arr = val.split("-");
+  if (arr.length !== 3) { alert("格式错误，请用 年-月-日"); return; }
+  const y = parseInt(arr[0]);
+  const m = parseInt(arr[1]) - 1;
+  const d = parseInt(arr[2]);
+  const t = new Date(y, m, d, 0, 0, 0).getTime();
+  if (isNaN(t)) { alert("日期无效"); return; }
   endTime = t;
-  localStorage.setItem(STORAGE_KEY_DEADLINE,String(t));
-  renderCountDown();
+  localStorage.setItem(STORAGE_DEADLINE, String(t));
+  renderCountdown();
 };
 
-//====折叠
-function toggle(id){
-  const el = document.getElementById(id);
-  el.classList.toggle("open");
+// ========== 折叠面板 ==========
+function toggleBlock(id) {
+  document.getElementById(id).classList.toggle("open");
 }
 
-//====作息保存
-const schedKey = "kaoyan_schedule_text";
+// ========== 作息自动保存 ==========
+const SCHED_KEY = "kaoyan_schedule";
 const schedDom = document.getElementById("schedInput");
-schedDom.value = localStorage.getItem(schedKey)||"";
-schedDom.oninput = ()=>localStorage.setItem(schedKey,schedDom.value);
+schedDom.value = localStorage.getItem(SCHED_KEY) || "";
+schedDom.oninput = function () {
+  localStorage.setItem(SCHED_KEY, schedDom.value);
+};
 
-//====番茄钟基础框架（完整业务逻辑本地localStorage，5点结转🔥、拍照错题、任务体系全部内置）
-let pomoTimer=null;
-let pomoSeconds = 25*60;
-let isCountUpMode = false;
-let pauseStartTs = null;
-const POMO_KEY = "kaoyan_pomo_data";
+// ========== 番茄钟基础 ==========
+let pomoTimer = null;
+let pomoSec = 25 * 60;
+let isCountUp = false;
 
-function renderPomoClock(){
-  const dom = document.getElementById("pomoClock");
-  if(isCountUpMode){
-    const m = Math.floor(pomoSeconds/60);
-    const s = pomoSeconds%60;
-    dom.innerText = String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
-  }else{
-    const m = Math.floor(pomoSeconds/60);
-    const s = pomoSeconds%60;
-    dom.innerText = String(m).padStart(2,"0")+":"+String(s).padStart(2,"0");
-  }
+function renderPomo() {
+  const m = Math.floor(pomoSec / 60);
+  const s = pomoSec % 60;
+  document.getElementById("pomoClock").innerText =
+    String(m).padStart(2, "0") + ":" + String(s).padStart(2, "0");
 }
-renderPomoClock();
+renderPomo();
 </script>
 </body>
 </html>
