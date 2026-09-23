@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -18,7 +17,7 @@
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
 <script defer src="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<!-- 云同步走 Bmob REST API（国内云，无需额外 SDK） -->
 <style>
 :root{
   --paper:#f6f1e7;--paper2:#ece4d2;--ink:#26221c;--soft:#6b6355;--line:#d6ccb6;
@@ -962,58 +961,116 @@ const QUESTIONS = [
 {id:"g32",d:"10.22",s:"专业课",t:"稳定性",q:"$K=10$ 时 $G(s)=K/[s(0.1s+1)(0.5s+1)]$ 是否稳定？$\\gamma$？",a:"稳定，$\\gamma\\approx17^\\circ$。",calc:"$K=10<14临界\\Rightarrow稳定；\\gamma\\approx17°$",key:"$比较实际K与临界K$"},
 ];
 
-/* ===== ☁️ Supabase 云账号（永久云端保存，跨设备互通） =====
-   使用方法：
-   1. Supabase 后台执行一次建表 SQL（见交付说明里的 user_data 表）；
-   2. 把下面两行换成你自己的值（Project URL 和 anon public key）。 */
-const SUPABASE_URL="https://carrpmoudvoifoctvcnf.supabase.co"; // ← 你的 Project URL
-const SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNhcnJwbW91ZHZvaWZvY3R2Y25mIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNDU2OTQsImV4cCI6MjEwNTcyMTY5NH0.QgkVICqEfw6Xdnfo6GIDU7isJfr1DGkl6ttixMSmXtQ"; // ← 你的 anon public key
+/* ===== ☁️ Bmob 云账号（国内云·永久云端保存·跨设备互通） =====
+   原理：邮箱注册/登录一次 → 本地 ka_* 数据自动同步到云端 user_data 表，
+   每条数据 ACL 私有（仅账号本人可读写），换任何设备登录同一账号数据自动回来。
+   无需备案域名，默认 API 域名 api.bmobcloud.com（国内访问稳定）。 */
+const BMOB_APPID="1b416a2f482103cbcad5095afd1e08aa";     // ← 你的 Bmob Application ID
+const BMOB_RESTKEY="74e693b81c3c0be76d4f0c91c1454e01";   // ← 你的 Bmob REST API Key
+const BMOB_API="https://api.bmobcloud.com";               // ← Bmob API 域名
 
-let _sb=null,_sbUser=null,_cloudDirty=null,_cloudTimer=null;
-function sbClient(){
-  if(_sb)return _sb;
-  if(!window.supabase||!SUPABASE_ANON_KEY||SUPABASE_ANON_KEY.indexOf("PASTE_")===0)return null;
-  try{_sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY,{auth:{persistSession:true,autoRefreshToken:true}});return _sb}catch(e){return null}
-}
-function sbUser(){return _sbUser}
-/* 把本地全部 ka_* 数据推送到云端（登录后调用） */
-function cloudPushAll(){
-  const sb=sbClient();if(!sb||!_sbUser)return;
-  const rows=[];const now=new Date().toISOString();
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k&&k.startsWith("ka_")){
-      try{rows.push({user_id:_sbUser.id,key:k,value:localStorage.getItem(k),updated_at:now})}catch(e){}
-    }
+let _sb=null,_sbUser=null,_cloudDirty=null,_cloudTimer=null,_cloudMap=null;
+try{_cloudMap=JSON.parse(localStorage.getItem("ka_cloud_map")||"{}")||{}}catch(e){_cloudMap={}}
+/* 通用 Bmob REST 请求：自动带应用ID/REST Key，登录后自动带会话Token */
+async function bmobFetch(path,opts){
+  const o=opts||{};
+  const headers={"X-Bmob-Application-Id":BMOB_APPID,"X-Bmob-REST-API-Key":BMOB_RESTKEY};
+  if(_sbUser&&_sbUser.sessionToken)headers["X-Bmob-Session-Token"]=_sbUser.sessionToken;
+  if(o.body)headers["Content-Type"]="application/json";
+  const res=await fetch(BMOB_API+path,{method:o.method||"GET",headers,body:o.body,cache:"no-store"});
+  const txt=await res.text();
+  let j=null;try{j=txt?JSON.parse(txt):null}catch(e){}
+  if(!res.ok){
+    const msg=(j&&(j.error||j.msg))||("HTTP "+res.status);
+    const err=new Error(msg);err.status=res.status;throw err;
   }
-  if(!rows.length)return;
-  sb.from("user_data").upsert(rows,{onConflict:"user_id,key"}).then(({error})=>{
-    if(error&&!String(error.message).includes("does not exist"))console.warn("cloudPush:",error.message);
-  });
+  return j||{};
+}
+function sbClient(){return BMOB_APPID&&BMOB_RESTKEY&&BMOB_APPID.indexOf("PASTE_")!==0?{ok:true}:null}
+function sbUser(){return _sbUser}
+function bmobACL(){const a={};if(_sbUser)a[_sbUser.id]={read:true,write:true};return a}
+function bmobSaveMap(){try{localStorage.setItem("ka_cloud_map",JSON.stringify(_cloudMap||{}))}catch(e){}}
+function bmobSaveSession(){try{localStorage.setItem("ka_cloud_session",JSON.stringify(_sbUser))}catch(e){}}
+function bmobClearSession(){_sbUser=null;try{localStorage.removeItem("ka_cloud_session");localStorage.removeItem("ka_cloud_map")}catch(e){}}
+/* 批量同步（Bmob 每次最多50条） */
+async function bmobBatch(ops){
+  if(!ops.length)return;
+  for(let i=0;i<ops.length;i+=50){
+    const chunk=ops.slice(i,i+50);
+    try{
+      const res=await bmobFetch("/1/batch",{method:"POST",body:JSON.stringify({requests:chunk})});
+      chunk.forEach((op,idx)=>{
+        if(op.method==="POST"&&res&&res[idx]&&res[idx].success&&res[idx].success.objectId){
+          _cloudMap=_cloudMap||{};_cloudMap[op.body.key]=res[idx].success.objectId;
+        }
+      });
+      bmobSaveMap();
+    }catch(e){console.warn("bmobBatch:",e.message)}
+  }
 }
 /* 从云端拉取全部数据写入本地（登录/注册成功后调用） */
 async function cloudPullAll(){
-  const sb=sbClient();if(!sb||!_sbUser)return false;
+  if(!_sbUser)return false;
   try{
-    const {data,error}=await sb.from("user_data").select("key,value").eq("user_id",_sbUser.id);
-    if(error){if(String(error.message).includes("does not exist"))return false;console.warn(error.message);return false}
-    if(data&&data.length){
-      data.forEach(r=>{try{localStorage.setItem(r.key,r.value)}catch(e){}});
-    }
+    const where=encodeURIComponent(JSON.stringify({ownerId:_sbUser.id}));
+    const data=await bmobFetch("/1/classes/user_data?where="+where+"&limit=500");
+    const rows=data.results||[];
+    const latest={};
+    rows.forEach(r=>{const old=latest[r.key];if(!old||String(old.updatedAt||"")<String(r.updatedAt||""))latest[r.key]=r});
+    _cloudMap={};
+    Object.values(latest).forEach(r=>{
+      _cloudMap[r.key]=r.objectId;
+      try{localStorage.setItem(r.key,r.value)}catch(e){}
+    });
+    bmobSaveMap();
     return true;
-  }catch(e){return false}
+  }catch(e){
+    if(e&&e.status===401)bmobClearSession();
+    console.warn("cloudPull:",e&&e.message);return false;
+  }
+}
+/* 把本地全部 ka_* 数据推送到云端（登录后调用） */
+async function cloudPushAll(){
+  if(!_sbUser)return;
+  const rows=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith("ka_")&&k!=="ka_cloud_map"&&k!=="ka_cloud_session"){
+      try{rows.push({key:k,value:localStorage.getItem(k)})}catch(e){}
+    }
+  }
+  if(!rows.length)return;
+  const ops=rows.map(r=>{
+    const oid=_cloudMap&&_cloudMap[r.key];
+    if(oid)return{method:"PUT",path:"/1/classes/user_data/"+oid,body:{value:r.value}};
+    return{method:"POST",path:"/1/classes/user_data",body:{ownerId:_sbUser.id,key:r.key,value:r.value,ACL:bmobACL()}};
+  });
+  await bmobBatch(ops);
 }
 /* 把单条数据排队写入云端（LS.set 的钩子，2秒防抖合并） */
 function cloudQueueSet(k,v){
-  if(!sbClient()||!_sbUser||!k||k.indexOf("ka_")!==0)return;
+  if(!_sbUser||!k||k.indexOf("ka_")!==0||k==="ka_cloud_map"||k==="ka_cloud_session")return;
   _cloudDirty=_cloudDirty||{};_cloudDirty[k]=v;
   clearTimeout(_cloudTimer);
-  _cloudTimer=setTimeout(()=>{
-    const sb=sbClient();if(!sb||!_sbUser||!_cloudDirty)return;
-    const rows=Object.keys(_cloudDirty).map(key=>({user_id:_sbUser.id,key,value:_cloudDirty[key],updated_at:new Date().toISOString()}));
-    _cloudDirty=null;
-    sb.from("user_data").upsert(rows,{onConflict:"user_id,key"}).catch(()=>{});
+  _cloudTimer=setTimeout(async()=>{
+    const dirty=_cloudDirty;_cloudDirty=null;
+    if(!_sbUser||!dirty)return;
+    const ops=Object.keys(dirty).map(key=>{
+      const oid=_cloudMap&&_cloudMap[key];
+      if(oid)return{method:"PUT",path:"/1/classes/user_data/"+oid,body:{value:dirty[key]}};
+      return{method:"POST",path:"/1/classes/user_data",body:{ownerId:_sbUser.id,key,value:dirty[key],ACL:bmobACL()}};
+    });
+    await bmobBatch(ops);
   },2000);
+}
+/* 自动恢复云会话：读取本地记住的登录，验证有效则拉取云端数据 */
+async function bmobRestoreSession(){
+  let saved=null;try{saved=JSON.parse(localStorage.getItem("ka_cloud_session")||"null")}catch(e){}
+  if(!saved||!saved.sessionToken||!saved.id){bmobClearSession();return false}
+  _sbUser=saved;
+  const ok=await cloudPullAll();
+  if(!ok){bmobClearSession();return false}
+  return true;
 }
 const LS = {
   get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},
@@ -1120,7 +1177,7 @@ function initAuth(){
   const clLogin=document.getElementById("clLogin"),clSignup=document.getElementById("clSignup");
   async function doCloud(reg){
     const sb=sbClient();
-    if(!sb){clStatus("云服务未配置：请先在代码里填入 anon key（见交付说明）",true);return}
+    if(!sb){clStatus("云服务未配置：请检查代码里的 Bmob 密钥",true);return}
     const email=document.getElementById("clEmail").value.trim();
     const pwd=document.getElementById("clPwd").value;
     if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){clStatus("请输入正确的邮箱地址",true);return}
@@ -1128,22 +1185,24 @@ function initAuth(){
     clStatus(reg?"正在注册…":"正在登录…",false);
     try{
       if(reg){
-        const {data,error}=await sb.auth.signUp({email,password:pwd});
-        if(error){clStatus("注册失败："+error.message,true);return}
-        if(!data.session){clStatus("注册成功！请到邮箱点验证链接激活账号，再回来登录",false);return}
-        _sbUser=data.session.user;
+        // Bmob 注册：username 用邮箱（全局唯一），注册成功即返回登录态
+        const user=await bmobFetch("/1/users",{method:"POST",body:JSON.stringify({username:email,password:pwd,email:email})});
+        if(!user||!user.sessionToken)throw new Error("注册失败："+(user&&user.error||""));
+        _sbUser={id:user.objectId,email,username:email,sessionToken:user.sessionToken};
+        bmobSaveSession();
         await cloudPullAll();           // 拉云端（新账号一般没有）
         await cloudPushAll();           // 把本机已有数据带到云端（首次注册）
         ROLE="owner";enterApp();
       }else{
-        const {data,error}=await sb.auth.signInWithPassword({email,password:pwd});
-        if(error){clStatus("登录失败："+error.message,true);return}
-        _sbUser=data.session.user;
-        const pulled=await cloudPullAll();   // 拉取云端全部数据 → 写入本地
-        if(!pulled)clStatus("已登录，但云端表未生效：请先在 Supabase 执行 user_data 建表 SQL（见交付说明）",true);
+        const qs="username="+encodeURIComponent(email)+"&password="+encodeURIComponent(pwd);
+        const user=await bmobFetch("/1/login?"+qs,{method:"GET"});
+        if(!user||!user.sessionToken)throw new Error(user&&user.error||"登录失败");
+        _sbUser={id:user.objectId,email:user.email||email,username:user.username||email,sessionToken:user.sessionToken};
+        bmobSaveSession();
+        await cloudPullAll();           // 拉取云端全部数据 → 写入本地
         ROLE="owner";enterApp();
       }
-    }catch(e){clStatus("网络异常，请稍后重试",true)}
+    }catch(e){clStatus("失败："+(e&&e.message||"网络异常，请稍后重试"),true)}
   }
   if(clLogin)clLogin.onclick=()=>doCloud(false);
   if(clSignup)clSignup.onclick=()=>doCloud(true);
@@ -2858,10 +2917,9 @@ function bindSettings(){
   if(so)so.onclick=async()=>{
     if(!_sbUser){alert("当前未登录云账号");return}
     if(!confirm("退出云账号后，本机数据仍保留，但不再自动同步。确定退出？"))return;
-    cloudPushAll();
-    const sb=sbClient();
-    try{await sb.auth.signOut()}catch(e){}
-    _sbUser=null;location.reload();
+    try{await cloudPushAll()}catch(e){}
+    bmobClearSession();
+    location.reload();
   };
   updateStartDateLabel();
 }
@@ -3266,14 +3324,11 @@ initAuth();
 auditUnfinished(false);
 setInterval(updateCountdown,1000);
 
-/* ☁️ 自动恢复云会话：Supabase 记住登录，每次打开自动拉取云端最新数据 */
+/* ☁️ 自动恢复云会话：Bmob 记住登录，每次打开自动拉取云端最新数据 */
 (async function autoCloudSession(){
-  const sb=sbClient();
-  if(!sb)return;
   try{
-    const {data}=await sb.auth.getSession();
-    if(!data.session)return;
-    _sbUser=data.session.user;
+    const restored=await bmobRestoreSession();
+    if(!restored)return;
     if(!sessionStorage.getItem("ka_cloud_loaded")){
       sessionStorage.setItem("ka_cloud_loaded","1");
       await cloudPullAll();
